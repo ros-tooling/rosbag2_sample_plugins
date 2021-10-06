@@ -6,16 +6,18 @@
 
 #include "rcutils/logging_macros.h"
 
+#include "rosbag2_storage/ros_helper.hpp"
+
 namespace
 {
-void debugPrintHexArray(const unsigned char* data, size_t len)
-{
-  std::ios_base::fmtflags f( std::cout.flags() );
-  for (size_t i = 0; i < len; ++i)
-      std::cout << std::uppercase << std::hex << std::setfill('0') << std::setw(2) << (((int)data[i]) & 0xFF) << " ";
-  std::cout << std::endl;
-  std::cout.flags( f );
-}
+// void debugPrintHexArray(const unsigned char* data, size_t len)
+// {
+//   std::ios_base::fmtflags f( std::cout.flags() );
+//   for (size_t i = 0; i < len; ++i)
+//       std::cout << std::uppercase << std::hex << std::setfill('0') << std::setw(2) << (((int)data[i]) & 0xFF) << " ";
+//   std::cout << std::endl;
+//   std::cout.flags( f );
+// }
 
 constexpr const auto FILE_EXTENSION = ".simple";
 }  // namespace
@@ -89,13 +91,30 @@ std::string SimpleFileStorage::get_storage_identifier() const
 bool SimpleFileStorage::has_next()
 {
   // TODO
-  return false;
+  return !in_.eof();
 }
 
 std::shared_ptr<rosbag2_storage::SerializedBagMessage> SimpleFileStorage::read_next()
 {
-  // TODO
-  return nullptr;
+  uint64_t time_stamp = 0;
+  uint32_t topic_size = 0;
+  uint32_t data_size = 0;
+
+  auto msg = std::make_shared<rosbag2_storage::SerializedBagMessage>();
+
+  in_.read(reinterpret_cast<char *>(&time_stamp), sizeof(time_stamp));
+  msg->time_stamp = time_stamp;
+
+  in_.read(reinterpret_cast<char *>(&topic_size), sizeof(topic_size));
+  msg->topic_name.resize(topic_size);
+  in_.read(&msg->topic_name[0], topic_size);
+
+  in_.read(reinterpret_cast<char *>(&data_size), sizeof(data_size));
+  msg->serialized_data = rosbag2_storage::make_empty_serialized_message(data_size);
+  in_.read(reinterpret_cast<char *>(msg->serialized_data->buffer), data_size);
+  msg->serialized_data->buffer_length = data_size;
+
+  return msg;
 }
 
 std::vector<rosbag2_storage::TopicMetadata> SimpleFileStorage::get_all_topics_and_types()
@@ -116,7 +135,7 @@ void SimpleFileStorage::reset_filter()
   set_filter(rosbag2_storage::StorageFilter());
 }
 
-void SimpleFileStorage::seek(const rcutils_time_point_value_t & timestamp)
+void SimpleFileStorage::seek(const rcutils_time_point_value_t &)
 {
   // TODO
 }
@@ -137,20 +156,15 @@ void SimpleFileStorage::write(std::shared_ptr<const rosbag2_storage::SerializedB
   // - topic name (variable)
   // - data size (4 byte)
   // - data (variable)
-  uint64_t timestamp = msg->time_stamp;
+  uint64_t time_stamp = msg->time_stamp;
   uint32_t topic_size = msg->topic_name.size();
   uint32_t data_size = msg->serialized_data->buffer_length;
 
-  out_.write(reinterpret_cast<const char *>(&timestamp), sizeof(timestamp));
+  out_.write(reinterpret_cast<const char *>(&time_stamp), sizeof(time_stamp));
   out_.write(reinterpret_cast<const char *>(&topic_size), sizeof(topic_size));
   out_.write(msg->topic_name.c_str(), topic_size);
   out_.write(reinterpret_cast<const char *>(&data_size), 4);
   out_.write(reinterpret_cast<const char *>(msg->serialized_data->buffer), data_size);
-
-  // TODO remove
-  // debugPrintHexArray(
-  //   reinterpret_cast<const unsigned char*>(msg->serialized_data->buffer),
-  //   msg->serialized_data->buffer_length);
 
   // Write the whole message to disk
   out_.flush();
@@ -164,14 +178,15 @@ void SimpleFileStorage::write(
   }
 }
 
-void SimpleFileStorage::create_topic(const rosbag2_storage::TopicMetadata & topic)
+void SimpleFileStorage::create_topic(const rosbag2_storage::TopicMetadata &)
 {
-  // TODO
+  // TODO metadata stuff
 }
 
-void SimpleFileStorage::remove_topic(const rosbag2_storage::TopicMetadata & topic)
+void SimpleFileStorage::remove_topic(const rosbag2_storage::TopicMetadata &)
 {
-  // TODO
+  // NOTE: ignoring this for this sample - there is no harm in the dangling metadata, even
+  // if no messages are written for it. This API is not used in default rosbag2 behavior.
 }
 
 }  // namespace rosbag2_storage_simplefile
