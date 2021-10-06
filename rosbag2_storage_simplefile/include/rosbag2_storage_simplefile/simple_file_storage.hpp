@@ -3,6 +3,7 @@
 
 #include <fstream>
 
+#include "rosbag2_storage/metadata_io.hpp"
 #include "rosbag2_storage/storage_interfaces/read_write_interface.hpp"
 
 #include "rosbag2_storage_simplefile/visibility_control.h"
@@ -60,14 +61,14 @@ public:
   void remove_topic(const rosbag2_storage::TopicMetadata & topic) override;
 
 private:
+  std::string relative_path_;
   std::ofstream out_;
+  std::ifstream in_;
+  rosbag2_storage::BagMetadata metadata_;
+  rosbag2_storage::MetadataIo metadata_io_;
+  rosbag2_storage::StorageFilter storage_filter_;
 };
 
 }  // namespace rosbag2_storage_plugins
 
 #endif  // ROSBAG2_STORAGE_SIMPLEFILE__ROSBAG2_STORAGE_SIMPLEFILE_HPP_
-
-#include "pluginlib/class_list_macros.hpp"  // NOLINT
-PLUGINLIB_EXPORT_CLASS(
-  rosbag2_storage_plugins::SimpleFileStorage,
-  rosbag2_storage::storage_interfaces::ReadWriteInterface)
