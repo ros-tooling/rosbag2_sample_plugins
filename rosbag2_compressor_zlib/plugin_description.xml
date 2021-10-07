@@ -1,0 +1,16 @@
+<library path="rosbag2_compressor_zlib">
+  <class
+    name="zlib"
+    type="rosbag2_compression_plugins::ZlibCompressor"
+    base_class_type="rosbag2_compression::BaseCompressorInterface"
+  >
+    <description>Sample plugin to compress using zlib.</description>
+  </class>
+  <class
+    name="zlib"
+    type="rosbag2_compression_plugins::ZlibCompressor"
+    base_class_type="rosbag2_compression::BaseDecompressorInterface"
+  >
+    <description>Sample plugin to decompress using zlib.</description>
+  </class>
+</library>
