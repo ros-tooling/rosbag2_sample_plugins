@@ -1,0 +1,9 @@
+<library path="rosbag2_converter_json">
+  <class
+    name="json_converter"
+    type="rosbag2_converter_plugins::JsonConverter"
+    base_class_type="rosbag2_cpp::converter_interfaces::SerializationFormatConverter"
+  >
+    <description>Sample plugin to convert messages to JSON.</description>
+  </class>
+</library>
