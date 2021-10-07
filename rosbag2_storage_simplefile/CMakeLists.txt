@@ -21,9 +21,7 @@ ament_target_dependencies(${PROJECT_NAME}
   rosbag2_storage
 )
 
-target_include_directories(${PROJECT_NAME} PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
+target_include_directories(${PROJECT_NAME} PUBLIC $<INSTALL_INTERFACE:include>)
 
 # Causes the visibility macros to use dllexport rather than dllimport,
 # which is appropriate when building the dll but not consuming it.
@@ -32,10 +30,6 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 
 pluginlib_export_plugin_description_file(rosbag2_storage plugin_description.xml)
 
-install(
-  DIRECTORY include/
-  DESTINATION include
-)
 install(
   TARGETS ${PROJECT_NAME}
   EXPORT export_${PROJECT_NAME}

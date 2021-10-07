@@ -1,12 +1,14 @@
-#include "rosbag2_storage_simplefile/simple_file_storage.hpp"
 
+#include <fstream>
 #include <iostream>
 #include <iomanip>
 #include <filesystem>
 
 #include "rcutils/logging_macros.h"
 
+#include "rosbag2_storage/metadata_io.hpp"
 #include "rosbag2_storage/ros_helper.hpp"
+#include "rosbag2_storage/storage_interfaces/read_write_interface.hpp"
 
 namespace
 {
@@ -19,18 +21,69 @@ namespace
 //   std::cout.flags( f );
 // }
 
-constexpr const auto FILE_EXTENSION = ".simple";
 }  // namespace
 
 namespace rosbag2_storage_plugins
 {
+
+constexpr const auto FILE_EXTENSION = ".simple";
+
+class SimpleFileStorage
+  : public rosbag2_storage::storage_interfaces::ReadWriteInterface
+{
+public:
+  SimpleFileStorage();
+
+  virtual ~SimpleFileStorage();
+
+  // BaseIOInterface
+  void open(
+    const rosbag2_storage::StorageOptions & storage_options,
+    rosbag2_storage::storage_interfaces::IOFlag io_flag =
+    rosbag2_storage::storage_interfaces::IOFlag::READ_WRITE) override;
+
+  // BaseInfoInterface
+  rosbag2_storage::BagMetadata get_metadata() override;
+  std::string get_relative_file_path() const override;
+  uint64_t get_bagfile_size() const override;
+  std::string get_storage_identifier() const override;
+
+  // BaseReadInterface
+  bool has_next() override;
+  std::shared_ptr<rosbag2_storage::SerializedBagMessage> read_next() override;
+  std::vector<rosbag2_storage::TopicMetadata> get_all_topics_and_types() override;
+
+  // ReadOnlyInterface
+  void set_filter(const rosbag2_storage::StorageFilter & storage_filter) override;
+  void reset_filter() override;
+  void seek(const rcutils_time_point_value_t & timestamp) override;
+
+  // ReadWriteInterface
+  uint64_t get_minimum_split_file_size() const override;
+
+  // BaseWriteInterface
+  void write(std::shared_ptr<const rosbag2_storage::SerializedBagMessage> msg) override;
+  void write(
+    const std::vector<std::shared_ptr<const rosbag2_storage::SerializedBagMessage>> & msg)
+  override;
+  void create_topic(const rosbag2_storage::TopicMetadata & topic) override;
+  void remove_topic(const rosbag2_storage::TopicMetadata & topic) override;
+
+private:
+  std::string relative_path_;
+  std::ofstream out_;
+  std::ifstream in_;
+  rosbag2_storage::BagMetadata metadata_;
+  rosbag2_storage::MetadataIo metadata_io_;
+  rosbag2_storage::StorageFilter storage_filter_;
+};
 
 SimpleFileStorage::SimpleFileStorage()
 {}
 
 SimpleFileStorage::~SimpleFileStorage()
 {
-  // TODO shutdown cleanup ("index"?)
+  // TODO shutdown cleanup ("index"?) - metadata stuff
 }
 
 /** BaseIOInterface **/
@@ -90,12 +143,13 @@ std::string SimpleFileStorage::get_storage_identifier() const
 /** BaseReadInterface **/
 bool SimpleFileStorage::has_next()
 {
-  // TODO
+  // TODO this changes if I put metadata block at end
   return !in_.eof();
 }
 
 std::shared_ptr<rosbag2_storage::SerializedBagMessage> SimpleFileStorage::read_next()
 {
+  // TODO filter
   uint64_t time_stamp = 0;
   uint32_t topic_size = 0;
   uint32_t data_size = 0;
@@ -143,7 +197,10 @@ void SimpleFileStorage::seek(const rcutils_time_point_value_t &)
 /** ReadWriteInterface **/
 uint64_t SimpleFileStorage::get_minimum_split_file_size() const
 {
-  // TODO
+  // NOTE: unlike SQLite3 there is no minimum size for this file type.
+  // In practice, the minimum size is the size of an empty BagMetadata, which would be
+  // written to the end of a file with no messages.
+  // TODO - note about header
   return 0u;
 }
 
