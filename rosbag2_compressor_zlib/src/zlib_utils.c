@@ -3,6 +3,8 @@
 namespace zlib_utils
 {
 
+static const size_t CHUNK = 262144;
+
 int compress(FILE * source, FILE * dest, int level)
 {
   int ret, flush;
@@ -169,9 +171,8 @@ int decompress(size_t source_size, uint8_t * source, std::vector<uint8_t> & dest
   /* decompress until deflate stream ends or end of file */
   do {
     in = source + in_pos;
-    size_t from = in_pos;
-    in_pos += std::min(size_t(CHUNK), source_size - from);
-    strm.avail_in = in_pos - from;
+    strm.avail_in = std::min(CHUNK, source_size - in_pos);
+    in_pos += strm.avail_in;
 
     if (strm.avail_in == 0)
       break;
@@ -200,22 +201,6 @@ int decompress(size_t source_size, uint8_t * source, std::vector<uint8_t> & dest
   /* clean up and return */
   (void)inflateEnd(&strm);
   return ret == Z_STREAM_END ? Z_OK : Z_DATA_ERROR;
-  // z_stream zInfo ={0};
-  // zInfo.total_in=  zInfo.avail_in=  nLenSrc;
-  // zInfo.total_out= zInfo.avail_out= nLenDst;
-  // zInfo.next_in= (BYTE*)abSrc;
-  // zInfo.next_out= abDst;
-  //
-  // int nErr, nRet= -1;
-  // nErr= inflateInit( &zInfo );               // zlib function
-  // if ( nErr == Z_OK ) {
-  //   nErr= inflate( &zInfo, Z_FINISH );     // zlib function
-  //   if ( nErr == Z_STREAM_END ) {
-  //     nRet= zInfo.total_out;
-  //   }
-  // }
-  // inflateEnd( &zInfo );   // zlib function
-  // return( nRet ); // -1 or len of output
 }
 
 }  // namespace zlib_utils

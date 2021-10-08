@@ -144,6 +144,7 @@ std::string SimpleFileStorage::get_storage_identifier() const
 bool SimpleFileStorage::has_next()
 {
   // TODO this changes if I put metadata block at end
+  (void)in_.peek();
   return !in_.eof();
 }
 

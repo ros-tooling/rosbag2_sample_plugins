@@ -2,10 +2,10 @@
 #include <filesystem>
 #include <vector>
 
+#include "rcutils/logging_macros.h"
 #include "rosbag2_compression/base_compressor_interface.hpp"
 #include "rosbag2_compression/base_decompressor_interface.hpp"
 
-#define CHUNK 262144
 #include "zlib_utils.c"
 
 namespace
@@ -34,6 +34,15 @@ void throw_on_rcutils_resize_error(const rcutils_ret_t resize_result)
       break;
   }
   throw std::runtime_error(error.str());
+}
+
+void vector_to_uint8array(
+  const std::vector<uint8_t> & source, std::shared_ptr<rcutils_uint8_array_t> dest)
+{
+  const auto resize_result = rcutils_uint8_array_resize(dest.get(), source.size());
+  throw_on_rcutils_resize_error(resize_result);
+  dest->buffer_length = source.size();
+  std::copy(source.begin(), source.end(), dest->buffer);
 }
 
 }  // namespace
@@ -69,7 +78,6 @@ public:
 std::string ZlibCompressor::compress_uri(const std::string & uri)
 {
   const std::string compressed_uri = uri + "." + get_compression_identifier();
-
   auto source = std::shared_ptr<std::FILE>(fopen(uri.c_str(), "r"), std::fclose);
   auto dest = std::shared_ptr<std::FILE>(fopen(compressed_uri.c_str(), "w"), std::fclose);
 
@@ -87,17 +95,13 @@ void ZlibCompressor::compress_serialized_bag_message(
   rosbag2_storage::SerializedBagMessage * bag_message)
 {
   std::vector<uint8_t> compressed_data;
-
+  RCUTILS_LOG_INFO("Pre-compressed data size %zu", bag_message->serialized_data->buffer_length);
   zlib_utils::compress(
     bag_message->serialized_data->buffer_length,
     bag_message->serialized_data->buffer,
     compressed_data);
-
-  const auto resize_result = rcutils_uint8_array_resize(
-    bag_message->serialized_data.get(), compressed_data.size());
-  throw_on_rcutils_resize_error(resize_result);
-  bag_message->serialized_data->buffer_length = compressed_data.size();
-  std::copy(compressed_data.begin(), compressed_data.end(), bag_message->serialized_data->buffer);
+  vector_to_uint8array(compressed_data, bag_message->serialized_data);
+  RCUTILS_LOG_INFO("Compressed data size %zu", bag_message->serialized_data->buffer_length);
 }
 
 std::string ZlibCompressor::get_compression_identifier() const
@@ -107,8 +111,7 @@ std::string ZlibCompressor::get_compression_identifier() const
 
 std::string ZlibCompressor::decompress_uri(const std::string & uri)
 {
-  const auto path_uri = std::filesystem::path{uri};
-  if (path_uri.extension() != "." + get_decompression_identifier()) {
+  if (std::filesystem::path{uri}.extension() != "." + get_decompression_identifier()) {
     std::stringstream errmsg;
     errmsg << "File " << uri << " was not a compressed file from "
       << get_decompression_identifier() << " plugin.";
@@ -116,9 +119,9 @@ std::string ZlibCompressor::decompress_uri(const std::string & uri)
   }
 
   const auto decompressed_uri = std::filesystem::path{uri}.replace_extension("");
-
   auto source = std::shared_ptr<std::FILE>(fopen(uri.c_str(), "r"), std::fclose);
   auto dest = std::shared_ptr<std::FILE>(fopen(decompressed_uri.c_str(), "w"), std::fclose);
+
   int ret = zlib_utils::decompress(source.get(), dest.get());
   if (ret != Z_OK) {
     std::stringstream errmsg;
@@ -133,16 +136,13 @@ void ZlibCompressor::decompress_serialized_bag_message(
   rosbag2_storage::SerializedBagMessage * bag_message)
 {
   std::vector<uint8_t> decompressed_data;
+  RCUTILS_LOG_INFO("Compressed data size %zu", bag_message->serialized_data->buffer_length);
   zlib_utils::decompress(
     bag_message->serialized_data->buffer_length,
     bag_message->serialized_data->buffer,
     decompressed_data);
-  const auto resize_result = rcutils_uint8_array_resize(
-    bag_message->serialized_data.get(), decompressed_data.size());
-  throw_on_rcutils_resize_error(resize_result);
-  bag_message->serialized_data->buffer_length = decompressed_data.size();
-  std::copy(
-    decompressed_data.begin(), decompressed_data.end(), bag_message->serialized_data->buffer);
+  RCUTILS_LOG_INFO("Decompressed data size %zu", decompressed_data.size());
+  vector_to_uint8array(decompressed_data, bag_message->serialized_data);
 }
 
 std::string ZlibCompressor::get_decompression_identifier() const
