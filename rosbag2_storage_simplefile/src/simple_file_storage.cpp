@@ -1,8 +1,9 @@
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
-#include <filesystem>
+#include <unordered_map>
 
 #include "rcutils/logging_macros.h"
 
@@ -27,6 +28,9 @@ namespace rosbag2_storage_plugins
 {
 
 constexpr const auto FILE_EXTENSION = ".simple";
+constexpr const char MAGIC_SEQUENCE[9] = {'\x89', 'S', 'B', 'A', 'G', '\r', '\n', '\x1a', '\n'};
+constexpr const uint8_t VERSION = 1;
+constexpr const size_t FOOTER_SIZE = 8;
 
 class SimpleFileStorage
   : public rosbag2_storage::storage_interfaces::ReadWriteInterface
@@ -70,20 +74,42 @@ public:
   void remove_topic(const rosbag2_storage::TopicMetadata & topic) override;
 
 private:
+  void init_read();
+  void init_write();
+
+  bool open_ = false;
+  uint8_t version_ = 0;
   std::string relative_path_;
   std::ofstream out_;
   std::ifstream in_;
+
   rosbag2_storage::BagMetadata metadata_;
+  std::unordered_map<std::string, rosbag2_storage::TopicInformation> topics_;
   rosbag2_storage::MetadataIo metadata_io_;
+  std::string tmp_metadata_path_;
+
   rosbag2_storage::StorageFilter storage_filter_;
 };
 
 SimpleFileStorage::SimpleFileStorage()
-{}
+{
+  metadata_.storage_identifier = get_storage_identifier();
+  metadata_.message_count = 0;
+}
 
 SimpleFileStorage::~SimpleFileStorage()
 {
-  // TODO shutdown cleanup ("index"?) - metadata stuff
+  // Write metadata
+  // TODO read from meta.tmp into string, write that out
+
+  // Now write footer
+
+  // Finally, put the magic sequence at the end
+  out_.write(MAGIC_SEQUENCE, 9);
+  out_.write(reinterpret_cast<char *>(&version_), 1);
+  out_.flush();
+
+  // TODO Delete meta.tmp
 }
 
 /** BaseIOInterface **/
@@ -96,33 +122,52 @@ void SimpleFileStorage::open(
       relative_path_ = storage_options.uri + FILE_EXTENSION;
       out_ = std::ofstream(relative_path_, std::ios::binary);
       in_ = std::ifstream(relative_path_, std::ios::binary);
+      init_write();
+      init_read();
       break;
     case rosbag2_storage::storage_interfaces::IOFlag::READ_ONLY:
       relative_path_ = storage_options.uri;
       in_ = std::ifstream(relative_path_, std::ios::binary);
+      init_read();
       break;
     case rosbag2_storage::storage_interfaces::IOFlag::APPEND:
       relative_path_ = storage_options.uri;
       out_ = std::ofstream(relative_path_, std::ios::binary | std::ios::ate);
       break;
   }
+
+  open_ = true;
+  tmp_metadata_path_ = std::filesystem::path{storage_options.uri}.parent_path() / "_meta.tmp";
+  metadata_.relative_file_paths = {get_relative_file_path()};
+}
+
+void SimpleFileStorage::init_read()
+{
+  char version_check[10];
+  in_.read(version_check, 10);
+  if (memcmp(version_check, MAGIC_SEQUENCE, 9) != 0) {
+    throw std::runtime_error("Specified file was not a SimpleFileStorage file");
+  }
+  version_ = version_check[9];
+}
+
+void SimpleFileStorage::init_write()
+{
+  version_ = VERSION;
+  out_.write(MAGIC_SEQUENCE, 9);
+  out_.write(reinterpret_cast<char *>(&version_), 1);
+  out_.flush();
+
 }
 
 /** BaseInfoInterface **/
 rosbag2_storage::BagMetadata SimpleFileStorage::get_metadata()
 {
-  rosbag2_storage::BagMetadata metadata;
-  metadata.storage_identifier = get_storage_identifier();
-  metadata.relative_file_paths = {get_relative_file_path()};
-  metadata.message_count = 0;
-  metadata.topics_with_message_count = {};
-  // TODO how is metadata stored / fetched
-  // metadata.message_count++;
-  // metadata.topics_with_message_count.push_back();
-  // metadata.starting_time = ??;
-  // metadata.duration = ??;
-  metadata.bag_size = get_bagfile_size();
-  return metadata;
+  metadata_.topics_with_message_count.clear();
+  for (const auto & kv : topics_) {
+    metadata_.topics_with_message_count.push_back(kv.second);
+  }
+  return metadata_;
 }
 
 std::string SimpleFileStorage::get_relative_file_path() const
@@ -143,7 +188,7 @@ std::string SimpleFileStorage::get_storage_identifier() const
 /** BaseReadInterface **/
 bool SimpleFileStorage::has_next()
 {
-  // TODO this changes if I put metadata block at end
+  // TODO filter and meta
   (void)in_.peek();
   return !in_.eof();
 }
@@ -174,14 +219,16 @@ std::shared_ptr<rosbag2_storage::SerializedBagMessage> SimpleFileStorage::read_n
 
 std::vector<rosbag2_storage::TopicMetadata> SimpleFileStorage::get_all_topics_and_types()
 {
-  // TODO
-  return {};
+  std::vector<rosbag2_storage::TopicMetadata> out;
+  for (const auto & topic : topics_) {
+    out.push_back(topic.second.topic_metadata);
+  }
+  return out;
 }
 
 /** ReadOnlyInterface **/
 void SimpleFileStorage::set_filter(const rosbag2_storage::StorageFilter & storage_filter)
 {
-  // TODO is this enough?
   storage_filter_ = storage_filter;
 }
 
@@ -198,34 +245,48 @@ void SimpleFileStorage::seek(const rcutils_time_point_value_t &)
 /** ReadWriteInterface **/
 uint64_t SimpleFileStorage::get_minimum_split_file_size() const
 {
-  // NOTE: unlike SQLite3 there is no minimum size for this file type.
-  // In practice, the minimum size is the size of an empty BagMetadata, which would be
-  // written to the end of a file with no messages.
-  // TODO - note about header
-  return 0u;
+  // A minimally sized file will have:
+  // - MAGIC_SEQUENCE + VERSION = 10B
+  // - No messages = 0B
+  // - Minimally sized metadata = 300B
+  // (since it is serialized YAML, this is fairly variable, this is a strictly lower bound)
+  // - FOOTER = 8B
+  // - MAGIC_SEQUENCE + VERSION = 10B
+  // 10 + 0 + 300 + 8 + 10 = 328B
+  // We will just state 1KB as an arbitrary but small lower limit
+  return 1024;
 }
 
 /** BaseWriteInterface **/
 void SimpleFileStorage::write(std::shared_ptr<const rosbag2_storage::SerializedBagMessage> msg)
 {
-  // Write format:
+  // MessageRecord format:
   // - timestamp (8 byte)
-  // - topic size (4 byte)
+  // - topic name size (4 byte)
   // - topic name (variable)
   // - data size (4 byte)
   // - data (variable)
   uint64_t time_stamp = msg->time_stamp;
   uint32_t topic_size = msg->topic_name.size();
   uint32_t data_size = msg->serialized_data->buffer_length;
-
   out_.write(reinterpret_cast<const char *>(&time_stamp), sizeof(time_stamp));
   out_.write(reinterpret_cast<const char *>(&topic_size), sizeof(topic_size));
   out_.write(msg->topic_name.c_str(), topic_size);
   out_.write(reinterpret_cast<const char *>(&data_size), 4);
   out_.write(reinterpret_cast<const char *>(msg->serialized_data->buffer), data_size);
 
-  // Write the whole message to disk
+  // Write the pending message to disk
   out_.flush();
+
+  /// Update metadata
+  // Increment individual topic message count
+  topics_.at(msg->topic_name).message_count++;
+  // Increment global message count
+  metadata_.message_count++;
+  // Determine bag duration. Note: this assumes in-order writes.
+  const auto chrono_ts = std::chrono::time_point<std::chrono::high_resolution_clock>(
+    std::chrono::nanoseconds(msg->time_stamp));
+  metadata_.duration = chrono_ts - metadata_.starting_time;
 }
 
 void SimpleFileStorage::write(
@@ -236,15 +297,16 @@ void SimpleFileStorage::write(
   }
 }
 
-void SimpleFileStorage::create_topic(const rosbag2_storage::TopicMetadata &)
+void SimpleFileStorage::create_topic(const rosbag2_storage::TopicMetadata & topic)
 {
-  // TODO metadata stuff
+  if (topics_.find(topic.name) == topics_.end()) {
+    topics_[topic.name] = rosbag2_storage::TopicInformation{topic, 0};
+  }
 }
 
-void SimpleFileStorage::remove_topic(const rosbag2_storage::TopicMetadata &)
+void SimpleFileStorage::remove_topic(const rosbag2_storage::TopicMetadata & topic)
 {
-  // NOTE: ignoring this for this sample - there is no harm in the dangling metadata, even
-  // if no messages are written for it. This API is not used in default rosbag2 behavior.
+  topics_.erase(topic.name);
 }
 
 }  // namespace rosbag2_storage_simplefile
