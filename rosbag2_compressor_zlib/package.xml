@@ -3,8 +3,8 @@
 <package format="3">
   <name>rosbag2_compressor_zlib</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="eknapp@todo.todo">eknapp</maintainer>
+  <description>Sample rosbag2 compression plugin using Zlib.</description>
+  <maintainer email="emerson.b.knapp@gmail.com">Emerson Knapp</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake_ros</buildtool_depend>
