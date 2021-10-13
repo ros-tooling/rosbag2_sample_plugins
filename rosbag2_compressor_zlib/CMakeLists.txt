@@ -12,7 +12,7 @@ find_package(pluginlib REQUIRED)
 find_package(rosbag2_compression REQUIRED)
 find_package(ZLIB REQUIRED)
 
-add_library(${PROJECT_NAME} src/zlib_compressor.cpp)
+add_library(${PROJECT_NAME} src/zlib_compressor.cpp src/zlib_utils.cpp)
 target_compile_features(${PROJECT_NAME} PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 target_include_directories(${PROJECT_NAME} PUBLIC $<INSTALL_INTERFACE:include> ${ZLIB_DEPS})
 # Causes the visibility macros to use dllexport rather than dllimport,

@@ -1,11 +1,28 @@
+// Copyright 2021, Amazon.com Inc or its Affiliates. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
-#include <optional>
+#include <memory>
+#include <optional>  // NOLINT - cppcheck thinks this is C stdlib for some reason
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 #include "rcutils/logging_macros.h"
 
@@ -16,7 +33,8 @@
 namespace rosbag2_storage_plugins
 {
 
-enum RecordType : uint8_t {
+enum RecordType : uint8_t
+{
   MESSAGE = 0x01,
   METADATA = 0x02,
   FOOTER = 0x03,
@@ -434,7 +452,7 @@ void SimpleFileStorage::remove_topic(const rosbag2_storage::TopicMetadata & topi
 }
 
 
-}  // namespace rosbag2_storage_simplefile
+}  // namespace rosbag2_storage_plugins
 
 #include "pluginlib/class_list_macros.hpp"  // NOLINT
 PLUGINLIB_EXPORT_CLASS(
