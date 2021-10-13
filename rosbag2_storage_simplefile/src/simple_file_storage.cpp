@@ -348,9 +348,21 @@ void SimpleFileStorage::reset_filter()
   set_filter(rosbag2_storage::StorageFilter());
 }
 
-void SimpleFileStorage::seek(const rcutils_time_point_value_t &)
+void SimpleFileStorage::seek(const rcutils_time_point_value_t & time_stamp)
 {
-  // TODO
+  if (open_as_ != rosbag2_storage::storage_interfaces::IOFlag::READ_ONLY) {
+    throw std::runtime_error{"Seek is only allowed in READ_ONLY mode."};
+  }
+
+  // If at the end, or after the seek destination, reset to beginning
+  if (!has_next() || next_->time_stamp > time_stamp) {
+    in_.seekg(10, std::ios::beg);
+  }
+
+  // Read messages until we reach the destination or the end
+  while (has_next() && next_->time_stamp < time_stamp) {
+    next_.reset();
+  }
 }
 
 /** ReadWriteInterface **/
