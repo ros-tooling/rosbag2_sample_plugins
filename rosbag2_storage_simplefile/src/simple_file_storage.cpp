@@ -3,13 +3,16 @@
 #include <fstream>
 #include <iostream>
 #include <iomanip>
+#include <optional>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "rcutils/logging_macros.h"
 
 #include "rosbag2_storage/metadata_io.hpp"
 #include "rosbag2_storage/ros_helper.hpp"
 #include "rosbag2_storage/storage_interfaces/read_write_interface.hpp"
+#include "rosbag2_storage/logging.hpp"
 
 namespace
 {
@@ -27,11 +30,32 @@ namespace
 namespace rosbag2_storage_plugins
 {
 
+enum RecordType : uint8_t {
+  MESSAGE = 0x01,
+  METADATA = 0x02,
+  FOOTER = 0x03,
+  MAGIC = 0x89,
+};
 constexpr const auto FILE_EXTENSION = ".simple";
-constexpr const char MAGIC_SEQUENCE[9] = {'\x89', 'S', 'B', 'A', 'G', '\r', '\n', '\x1a', '\n'};
+constexpr const char MAGIC_SEQUENCE[9] = {
+  static_cast<char>(RecordType::MAGIC), 'S', 'B', 'A', 'G', '\r', '\n', '\x1a', '\n'};
 constexpr const uint8_t VERSION = 1;
 constexpr const size_t FOOTER_SIZE = 8;
 
+/**
+ * A storage implementation for a very simple binary rosbag2 file format.
+ *
+ * File goes like:
+ * MAGIC_SEQUENCE (10B - a 9 byte identifier sequence and one byte version number)
+ * MESSAGE RECORDS (byte 0x01, followed by a message record)
+ * METADATA (byte 0x02, followed by YAML serialized string of the bag metadata)
+ * FOOTER (byte 0x03, followed by 8 byte size of the metadata - to be used as a relative offset)
+ * MAGIC_SEQUENCE (10B)
+ *
+ * For the sake of simplicity for this demonstration,
+ * this format is not crash-resistant - without a clean shutdown
+ * the data will not be recoverable because metadata is written at the end.
+ */
 class SimpleFileStorage
   : public rosbag2_storage::storage_interfaces::ReadWriteInterface
 {
@@ -76,19 +100,22 @@ public:
 private:
   void init_read();
   void init_write();
+  bool read_and_enqueue_message();
 
-  bool open_ = false;
+  std::optional<rosbag2_storage::storage_interfaces::IOFlag> open_as_;
   uint8_t version_ = 0;
   std::string relative_path_;
   std::ofstream out_;
   std::ifstream in_;
 
+  std::shared_ptr<rosbag2_storage::SerializedBagMessage> next_;
+
   rosbag2_storage::BagMetadata metadata_;
   std::unordered_map<std::string, rosbag2_storage::TopicInformation> topics_;
   rosbag2_storage::MetadataIo metadata_io_;
-  std::string tmp_metadata_path_;
 
   rosbag2_storage::StorageFilter storage_filter_;
+  std::unordered_set<std::string> filter_topics_;
 };
 
 SimpleFileStorage::SimpleFileStorage()
@@ -99,17 +126,28 @@ SimpleFileStorage::SimpleFileStorage()
 
 SimpleFileStorage::~SimpleFileStorage()
 {
-  // Write metadata
-  // TODO read from meta.tmp into string, write that out
+  if (!open_as_) {
+    return;
+  }
+  if (open_as_ == rosbag2_storage::storage_interfaces::IOFlag::READ_WRITE) {
+    // Write metadata
+    char record_type = static_cast<char>(RecordType::METADATA);
+    out_.write(&record_type, 1);
 
-  // Now write footer
+    auto serialized = metadata_io_.serialize_metadata(get_metadata());
+    uint64_t serialized_size = serialized.size();
+    out_.write(serialized.c_str(), serialized.size());
 
-  // Finally, put the magic sequence at the end
-  out_.write(MAGIC_SEQUENCE, 9);
-  out_.write(reinterpret_cast<char *>(&version_), 1);
-  out_.flush();
+    // Write footer
+    record_type = static_cast<char>(RecordType::FOOTER);
+    out_.write(&record_type, 1);
+    out_.write(reinterpret_cast<const char *>(&serialized_size), sizeof(serialized_size));
 
-  // TODO Delete meta.tmp
+    // Finally, put the magic sequence at the end
+    out_.write(MAGIC_SEQUENCE, 9);
+    out_.write(reinterpret_cast<char *>(&version_), 1);
+    out_.flush();
+  }
 }
 
 /** BaseIOInterface **/
@@ -123,7 +161,6 @@ void SimpleFileStorage::open(
       out_ = std::ofstream(relative_path_, std::ios::binary);
       in_ = std::ifstream(relative_path_, std::ios::binary);
       init_write();
-      init_read();
       break;
     case rosbag2_storage::storage_interfaces::IOFlag::READ_ONLY:
       relative_path_ = storage_options.uri;
@@ -131,24 +168,52 @@ void SimpleFileStorage::open(
       init_read();
       break;
     case rosbag2_storage::storage_interfaces::IOFlag::APPEND:
-      relative_path_ = storage_options.uri;
-      out_ = std::ofstream(relative_path_, std::ios::binary | std::ios::ate);
+      throw std::runtime_error("SimpleFileStorage does not support APPEND mode");
       break;
   }
-
-  open_ = true;
-  tmp_metadata_path_ = std::filesystem::path{storage_options.uri}.parent_path() / "_meta.tmp";
+  open_as_ = io_flag;
   metadata_.relative_file_paths = {get_relative_file_path()};
 }
 
 void SimpleFileStorage::init_read()
 {
-  char version_check[10];
-  in_.read(version_check, 10);
-  if (memcmp(version_check, MAGIC_SEQUENCE, 9) != 0) {
+  char magic_check[10];
+
+  // Backwards read jumps: MAGIC, FOOTER, then METADATA
+  size_t backwards_bytes = 10;
+  in_.seekg(-backwards_bytes, std::ios::end);
+  in_.read(magic_check, 10);
+  if (memcmp(magic_check, MAGIC_SEQUENCE, 9) != 0) {
     throw std::runtime_error("Specified file was not a SimpleFileStorage file");
   }
-  version_ = version_check[9];
+  version_ = magic_check[9];
+  backwards_bytes += 9;
+
+  uint64_t metadata_size = 0;
+  uint8_t record_type;
+  in_.seekg(-backwards_bytes, std::ios::end);
+  in_.read(reinterpret_cast<char *>(&record_type), 1);
+  assert(record_type == RecordType::FOOTER);
+  ROSBAG2_STORAGE_LOG_INFO("yay footer confirmed");
+
+  in_.read(reinterpret_cast<char *>(&metadata_size), 8);
+  backwards_bytes += metadata_size;
+  ROSBAG2_STORAGE_LOG_INFO("metadata_size %llu", metadata_size);
+
+  std::string serialized_metadata;
+  serialized_metadata.resize(metadata_size);
+  in_.seekg(-backwards_bytes, std::ios::end);
+  in_.read(&serialized_metadata[0], metadata_size);
+  ROSBAG2_STORAGE_LOG_INFO_STREAM("metadat found: " << serialized_metadata);
+  metadata_ = metadata_io_.deserialize_metadata(serialized_metadata);
+
+  in_.seekg(0, std::ios::beg);
+  in_.read(magic_check, 10);
+  if (memcmp(magic_check, MAGIC_SEQUENCE, 9) != 0) {
+    throw std::runtime_error("Specified file was not a SimpleFileStorage file");
+  }
+  version_ = magic_check[9];
+  ROSBAG2_STORAGE_LOG_INFO("All read initializing passed.");
 }
 
 void SimpleFileStorage::init_write()
@@ -157,7 +222,6 @@ void SimpleFileStorage::init_write()
   out_.write(MAGIC_SEQUENCE, 9);
   out_.write(reinterpret_cast<char *>(&version_), 1);
   out_.flush();
-
 }
 
 /** BaseInfoInterface **/
@@ -186,24 +250,34 @@ std::string SimpleFileStorage::get_storage_identifier() const
 }
 
 /** BaseReadInterface **/
-bool SimpleFileStorage::has_next()
+bool SimpleFileStorage::read_and_enqueue_message()
 {
-  // TODO filter and meta
-  (void)in_.peek();
-  return !in_.eof();
-}
-
-std::shared_ptr<rosbag2_storage::SerializedBagMessage> SimpleFileStorage::read_next()
-{
-  // TODO filter
-  uint64_t time_stamp = 0;
-  uint32_t topic_size = 0;
-  uint32_t data_size = 0;
+  if (next_ != nullptr) {
+    return true;
+  }
+  if (!open_as_) {
+    return false;
+  }
+  uint8_t record_type = in_.peek();
+  if (record_type != RecordType::MESSAGE) {
+    next_.reset();
+    return false;
+  }
+  // Clear the record byte
+  in_.get();
 
   auto msg = std::make_shared<rosbag2_storage::SerializedBagMessage>();
 
-  in_.read(reinterpret_cast<char *>(&time_stamp), sizeof(time_stamp));
-  msg->time_stamp = time_stamp;
+  // MessageRecord format:
+  // - timestamp (8 byte)
+  // - topic name size (4 byte)
+  // - topic name (variable)
+  // - data size (4 byte)
+  // - data (variable)
+  uint32_t topic_size = 0;
+  uint32_t data_size = 0;
+
+  in_.read(reinterpret_cast<char *>(&msg->time_stamp), sizeof(msg->time_stamp));
 
   in_.read(reinterpret_cast<char *>(&topic_size), sizeof(topic_size));
   msg->topic_name.resize(topic_size);
@@ -214,7 +288,42 @@ std::shared_ptr<rosbag2_storage::SerializedBagMessage> SimpleFileStorage::read_n
   in_.read(reinterpret_cast<char *>(msg->serialized_data->buffer), data_size);
   msg->serialized_data->buffer_length = data_size;
 
-  return msg;
+  next_ = msg;
+  return true;
+}
+
+bool SimpleFileStorage::has_next()
+{
+  if (next_) {
+    return true;
+  }
+  while (true) {
+    if (!read_and_enqueue_message()) {
+      ROSBAG2_STORAGE_LOG_INFO("No message at all");
+      return false;
+    }
+    ROSBAG2_STORAGE_LOG_INFO("Read message, checking filter.");
+    // Continue reading messages until one matches the filter, or there are none left
+    if (filter_topics_.empty() || filter_topics_.count(next_->topic_name)) {
+      ROSBAG2_STORAGE_LOG_INFO("Message passed filter!");
+      break;
+    }
+    ROSBAG2_STORAGE_LOG_INFO("NO PAZSS!");
+  }
+  ROSBAG2_STORAGE_LOG_INFO("Returning true that has next");
+  return true;
+}
+
+std::shared_ptr<rosbag2_storage::SerializedBagMessage> SimpleFileStorage::read_next()
+{
+  ROSBAG2_STORAGE_LOG_INFO("Calling read next");
+  if (next_ == nullptr) {
+    throw std::runtime_error{"has_next has not been called, or there is no message"};
+  }
+  auto tmp = next_;
+  ROSBAG2_STORAGE_LOG_INFO_STREAM("Returning some stuff with ts " << tmp->time_stamp);
+  next_.reset();
+  return tmp;
 }
 
 std::vector<rosbag2_storage::TopicMetadata> SimpleFileStorage::get_all_topics_and_types()
@@ -230,6 +339,8 @@ std::vector<rosbag2_storage::TopicMetadata> SimpleFileStorage::get_all_topics_an
 void SimpleFileStorage::set_filter(const rosbag2_storage::StorageFilter & storage_filter)
 {
   storage_filter_ = storage_filter;
+  filter_topics_.clear();
+  filter_topics_.insert(storage_filter.topics.begin(), storage_filter.topics.end());
 }
 
 void SimpleFileStorage::reset_filter()
@@ -260,6 +371,9 @@ uint64_t SimpleFileStorage::get_minimum_split_file_size() const
 /** BaseWriteInterface **/
 void SimpleFileStorage::write(std::shared_ptr<const rosbag2_storage::SerializedBagMessage> msg)
 {
+  static const char record_type = static_cast<char>(RecordType::MESSAGE);
+  out_.write(&record_type, 1);
+
   // MessageRecord format:
   // - timestamp (8 byte)
   // - topic name size (4 byte)
@@ -308,6 +422,7 @@ void SimpleFileStorage::remove_topic(const rosbag2_storage::TopicMetadata & topi
 {
   topics_.erase(topic.name);
 }
+
 
 }  // namespace rosbag2_storage_simplefile
 
