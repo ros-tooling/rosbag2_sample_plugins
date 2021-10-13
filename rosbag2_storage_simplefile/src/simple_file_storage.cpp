@@ -311,6 +311,8 @@ bool SimpleFileStorage::has_next()
     if (filter_topics_.empty() || filter_topics_.count(next_->topic_name)) {
       break;
     }
+    // Next message did not pass filter - throw it away
+    next_.reset();
   }
   return true;
 }
