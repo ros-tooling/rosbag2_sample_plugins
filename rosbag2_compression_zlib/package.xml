@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>rosbag2_compressor_zlib</name>
+  <name>rosbag2_compression_zlib</name>
   <version>0.0.0</version>
   <description>Sample rosbag2 compression plugin using Zlib.</description>
   <maintainer email="emerson.b.knapp@gmail.com">Emerson Knapp</maintainer>
