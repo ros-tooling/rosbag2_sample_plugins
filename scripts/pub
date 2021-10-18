@@ -1,0 +1,3 @@
+#!/bin/bash
+
+ros2 topic pub --rate 200 /chat std_msgs/String "data: hhearsotularsotiuen"
