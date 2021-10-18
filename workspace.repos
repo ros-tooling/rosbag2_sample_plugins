@@ -1,11 +1,11 @@
 repositories:
   dynamic_message_introspection:
     type: git
-    url: git@github.com:christophebedard/dynamic_message_introspection.git
+    url: https://github.com/emersonknapp/dynamic_message_introspection.git
     version: add-cpp-support-and-refactor
   rosbag2_sample_plugins:
     type: git    
-    url: git@github.com:emersonknapp/rosbag2_sample_plugins.git
+    url: https://github.com/ros-tooling/rosbag2_sample_plugins.git
     version: master
   rosbag2:
     type: git
