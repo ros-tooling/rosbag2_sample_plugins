@@ -1,5 +1,0 @@
-#!/bin/bash
-set -euxo pipefail
-
-rocker --user --x11 $DEVIMG \
-  --oyr-run-arg "--name $DEVIMG -v $(pwd):/ws --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -v $HOME/dev/ros/infra:/infra"
