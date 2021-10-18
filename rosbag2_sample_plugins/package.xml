@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>rosbag2_sample_plugins</name>
+  <version>0.0.0</version>
+  <description>Metapackage containing demos of sample plugins for ROSWorld2021 talk "rosbag2 for power users".</description>
+  <maintainer email="emerson.b.knapp@gmail.com">Emerson Knapp</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake_ros</buildtool_depend>
+
+  <exec_depend>rosbag2_compression_zlib</exec_depend>
+  <exec_depend>rosbag2_converter_yaml</exec_depend>
+  <exec_depend>rosbag2_storage_simplefile</exec_depend>
+
+  <exec_depend>ros2cli_common_extensions</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
