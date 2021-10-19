@@ -10,4 +10,4 @@ repositories:
   rosbag2:
     type: git
     url: git@github.com:ros2/rosbag2.git
-    version: emersonknapp/misc-improvements
+    version: rosworld2021
