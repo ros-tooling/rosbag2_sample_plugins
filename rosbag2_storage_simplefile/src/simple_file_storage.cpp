@@ -50,15 +50,22 @@ constexpr const size_t FOOTER_SIZE = 8;
  * A storage implementation for a very simple binary rosbag2 file format.
  *
  * File goes like:
- * MAGIC_SEQUENCE (10B - a 9 byte identifier sequence and one byte version number)
- * MESSAGE RECORDS (byte 0x01, followed by a message record)
- * METADATA (byte 0x02, followed by YAML serialized string of the bag metadata)
- * FOOTER (byte 0x03, followed by 8 byte size of the metadata - to be used as a relative offset)
- * MAGIC_SEQUENCE (10B)
+ * MAGIC_SEQUENCE  : 10B - a 9B identifier sequence and 1B version number
+ * MESSAGE RECORDS : byte 0x01, followed by a MessageRecord - see below
+ * METADATA        : byte 0x02, followed by YAML-serialized string of bag metadata
+ * FOOTER          : byte 0x03, followed by 8 byte size of metadata used as a relative offset
+ * MAGIC_SEQUENCE  : 10B - same as beginning
+ *
+ * MessageRecord format:
+ *  - timestamp (8 byte)
+ *  - topic name size (4 byte)
+ *  - topic name (variable)
+ *  - data size (4 byte)
+ *  - data (variable)
  *
  * For the sake of simplicity for this demonstration,
  * this format is not crash-resistant - without a clean shutdown
- * the data will not be recoverable because metadata is written at the end.
+ * the data will not be recoverable because metadata is only written at the end.
  */
 class SimpleFileStorage
   : public rosbag2_storage::storage_interfaces::ReadWriteInterface
