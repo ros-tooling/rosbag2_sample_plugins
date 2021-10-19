@@ -190,7 +190,6 @@ void SimpleFileStorage::init_read()
 
   // Jumping backwards from the end of the file to get the metadata
   // First read the magic sequence
-  RCUTILS_LOG_INFO_NAMED("simple_storage", "Reading ending magic sequence");
   backwards_bytes += 10;
   in_.seekg(-backwards_bytes, std::ios::end);
   in_.read(magic_check, 10);
@@ -200,7 +199,6 @@ void SimpleFileStorage::init_read()
   version_ = magic_check[9];
 
   // Now read the footer (1 identifier byte and 8 bytes of metadata size)
-  RCUTILS_LOG_INFO_NAMED("simple_storage", "Reading footer");
   backwards_bytes += 9;
   uint64_t metadata_size = 0;
   uint8_t record_type;
@@ -210,7 +208,6 @@ void SimpleFileStorage::init_read()
   in_.read(reinterpret_cast<char *>(&metadata_size), 8);
 
   // Read the metadata based on the size we got
-  RCUTILS_LOG_INFO_NAMED("simple_storage", "Reading metadata");
   backwards_bytes += metadata_size;
   std::string serialized_metadata;
   serialized_metadata.resize(metadata_size);
@@ -223,7 +220,6 @@ void SimpleFileStorage::init_read()
 
   // Finally, seek to the beginning and read the magic sequence off the top.
   // Now ready to read messages.
-  RCUTILS_LOG_INFO_NAMED("simple_storage", "Back to beginning, reading top magic sequence");
   in_.seekg(0, std::ios::beg);
   in_.read(magic_check, 10);
   if (memcmp(magic_check, MAGIC_SEQUENCE, 9) != 0) {
