@@ -29,7 +29,7 @@ class Talker(Node):
         self.chat_count = 0
 
     def publish_chat(self):
-        msg = String(data=f'chat {self.chat_count}')
+        msg = String(data=f'hello {self.chat_count}')
         print(f'Published {msg.data}')
         self.chat_pub.publish(msg)
         self.chat_count += 1
