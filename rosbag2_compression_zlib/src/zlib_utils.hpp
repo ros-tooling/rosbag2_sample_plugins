@@ -15,7 +15,10 @@
 #ifndef ZLIB_UTILS_HPP_
 #define ZLIB_UTILS_HPP_
 
+#include <memory>
 #include <vector>
+
+#include "rcutils/types.h"
 
 namespace zlib_utils
 {
@@ -24,6 +27,9 @@ int compress(FILE * source, FILE * dest, int level);
 int compress(size_t source_size, uint8_t * source, std::vector<uint8_t> & dest);
 int decompress(FILE * source, FILE * dest);
 int decompress(size_t source_size, uint8_t * source, std::vector<uint8_t> & dest);
+
+void vector_to_uint8array(
+  const std::vector<uint8_t> & source, std::shared_ptr<rcutils_uint8_array_t> dest);
 
 }  // namespace zlib_utils
 

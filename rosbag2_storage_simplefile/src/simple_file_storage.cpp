@@ -68,32 +68,32 @@ public:
 
   virtual ~SimpleFileStorage();
 
-  // BaseIOInterface
+  /** BaseIOInterface **/
   void open(
     const rosbag2_storage::StorageOptions & storage_options,
     rosbag2_storage::storage_interfaces::IOFlag io_flag =
     rosbag2_storage::storage_interfaces::IOFlag::READ_WRITE) override;
 
-  // BaseInfoInterface
+  /** BaseInfoInterface **/
   rosbag2_storage::BagMetadata get_metadata() override;
   std::string get_relative_file_path() const override;
   uint64_t get_bagfile_size() const override;
   std::string get_storage_identifier() const override;
 
-  // BaseReadInterface
+  /** BaseReadInterface **/
   bool has_next() override;
   std::shared_ptr<rosbag2_storage::SerializedBagMessage> read_next() override;
   std::vector<rosbag2_storage::TopicMetadata> get_all_topics_and_types() override;
 
-  // ReadOnlyInterface
+  /** ReadOnlyInterface **/
   void set_filter(const rosbag2_storage::StorageFilter & storage_filter) override;
   void reset_filter() override;
   void seek(const rcutils_time_point_value_t & timestamp) override;
 
-  // ReadWriteInterface
+  /** ReadWriteInterface **/
   uint64_t get_minimum_split_file_size() const override;
 
-  // BaseWriteInterface
+  /** BaseWriteInterface **/
   void write(std::shared_ptr<const rosbag2_storage::SerializedBagMessage> msg) override;
   void write(
     const std::vector<std::shared_ptr<const rosbag2_storage::SerializedBagMessage>> & msg)

@@ -11,19 +11,56 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#include "./zlib_utils.hpp"
+
 #include <cassert>
 
 #include <algorithm>
+#include <sstream>
 #include <vector>
 
 #include "zlib.h"  // NOLINT
 
-namespace zlib_utils
-{
 
 /// Utility functions implementing both file and buffer compression/decompression via Zlib.
 /// Implementations copied with minor modifications from the Zlib samples:
 /// https://zlib.net/zlib_how.html
+namespace zlib_utils
+{
+
+void throw_on_rcutils_resize_error(const rcutils_ret_t resize_result)
+{
+  if (resize_result == RCUTILS_RET_OK) {
+    return;
+  }
+
+  std::stringstream error;
+  error << "rcutils_uint8_array_resize error: ";
+  switch (resize_result) {
+    case RCUTILS_RET_INVALID_ARGUMENT:
+      error << "Invalid Argument";
+      break;
+    case RCUTILS_RET_BAD_ALLOC:
+      error << "Bad Alloc";
+      break;
+    case RCUTILS_RET_ERROR:
+      error << "Ret Error";
+      break;
+    default:
+      error << "Unexpected Result";
+      break;
+  }
+  throw std::runtime_error(error.str());
+}
+
+void vector_to_uint8array(
+  const std::vector<uint8_t> & source, std::shared_ptr<rcutils_uint8_array_t> dest)
+{
+  const auto resize_result = rcutils_uint8_array_resize(dest.get(), source.size());
+  throw_on_rcutils_resize_error(resize_result);
+  dest->buffer_length = source.size();
+  std::copy(source.begin(), source.end(), dest->buffer);
+}
 
 static const size_t CHUNK = 262144;
 

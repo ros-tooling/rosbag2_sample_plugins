@@ -26,45 +26,6 @@
 
 #include "./zlib_utils.hpp"
 
-namespace
-{
-
-void throw_on_rcutils_resize_error(const rcutils_ret_t resize_result)
-{
-  if (resize_result == RCUTILS_RET_OK) {
-    return;
-  }
-
-  std::stringstream error;
-  error << "rcutils_uint8_array_resize error: ";
-  switch (resize_result) {
-    case RCUTILS_RET_INVALID_ARGUMENT:
-      error << "Invalid Argument";
-      break;
-    case RCUTILS_RET_BAD_ALLOC:
-      error << "Bad Alloc";
-      break;
-    case RCUTILS_RET_ERROR:
-      error << "Ret Error";
-      break;
-    default:
-      error << "Unexpected Result";
-      break;
-  }
-  throw std::runtime_error(error.str());
-}
-
-void vector_to_uint8array(
-  const std::vector<uint8_t> & source, std::shared_ptr<rcutils_uint8_array_t> dest)
-{
-  const auto resize_result = rcutils_uint8_array_resize(dest.get(), source.size());
-  throw_on_rcutils_resize_error(resize_result);
-  dest->buffer_length = source.size();
-  std::copy(source.begin(), source.end(), dest->buffer);
-}
-
-}  // namespace
-
 namespace rosbag2_compression_plugins
 {
 
@@ -122,7 +83,7 @@ void ZlibCompressor::compress_serialized_bag_message(
     compressed_data);
 
   // Copy the result to the fixed-sized array output
-  vector_to_uint8array(compressed_data, bag_message->serialized_data);
+  zlib_utils::vector_to_uint8array(compressed_data, bag_message->serialized_data);
 }
 
 std::string ZlibCompressor::get_compression_identifier() const
@@ -167,7 +128,7 @@ void ZlibCompressor::decompress_serialized_bag_message(
     decompressed_data);
 
   // Copy result to fixed-size array in serialized message
-  vector_to_uint8array(decompressed_data, bag_message->serialized_data);
+  zlib_utils::vector_to_uint8array(decompressed_data, bag_message->serialized_data);
 }
 
 std::string ZlibCompressor::get_decompression_identifier() const

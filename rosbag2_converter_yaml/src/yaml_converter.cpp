@@ -30,7 +30,6 @@ class YamlConverter
 {
 public:
   YamlConverter() = default;
-
   virtual ~YamlConverter() = default;
 
   /** SerializationFormatSerializer **/
