@@ -35,13 +35,13 @@ public:
   /** SerializationFormatSerializer **/
   void serialize(
     std::shared_ptr<const rosbag2_cpp::rosbag2_introspection_message_t> ros_message,
-    const rosidl_message_type_support_t * type_support,
+    const rosidl_message_type_support_t * introspection_type_support,
     std::shared_ptr<rosbag2_storage::SerializedBagMessage> serialized_message) override;
 
   /** SerializationFormatDeserializer **/
   void deserialize(
     std::shared_ptr<const rosbag2_storage::SerializedBagMessage> serialized_message,
-    const rosidl_message_type_support_t * type_support,
+    const rosidl_message_type_support_t * introspection_type_support,
     std::shared_ptr<rosbag2_cpp::rosbag2_introspection_message_t> ros_message) override;
 };
 

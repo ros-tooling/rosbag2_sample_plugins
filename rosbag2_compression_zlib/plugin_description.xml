@@ -1,4 +1,4 @@
-<library path="rosbag2_compressor_zlib">
+<library path="rosbag2_compression_zlib">
   <class
     name="zlib"
     type="rosbag2_compression_plugins::ZlibCompressor"
