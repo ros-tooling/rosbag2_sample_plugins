@@ -8,4 +8,8 @@ install(
   DIRECTORY scripts/
   DESTINATION lib/${PROJECT_NAME}/
 )
+install(
+  DIRECTORY config/
+  DESTINATION config/
+)
 ament_package()
