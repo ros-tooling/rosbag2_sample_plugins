@@ -31,12 +31,13 @@ NOTE: the repos file is mainly necessary for the `dynamic_message_introspection`
 ## Running demos
 
 ```
-# Start viewer and data publisher
-rviz2 -d src/rosbag2_sample_plugins/rosbag2_sample_plugins/config/sample.rviz
+# Start viewer and data publisher (separate shells)
+rviz2 -d $(ros2 pkg prefix rosbag2_sample_plugins)/config/sample.rviz
 ros2 run rosbag2_sample_plugins pub_sample_data
+
 # Look in RViz, you can see the fake odometry
 
-# Put bags somewhere collected
+# Put bags in some common location
 mkdir data
 cd data
 ```

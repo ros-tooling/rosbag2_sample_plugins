@@ -7,6 +7,7 @@ add_custom_target(${PROJECT_NAME})
 install(
   DIRECTORY scripts/
   DESTINATION lib/${PROJECT_NAME}/
+  USE_SOURCE_PERMISSIONS
 )
 install(
   DIRECTORY config/
