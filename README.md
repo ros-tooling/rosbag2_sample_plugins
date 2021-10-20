@@ -39,12 +39,45 @@ ros2 run rosbag2_sample_plugins pub_sample_data
 # Put bags somewhere collected
 mkdir data
 cd data
-
-
-# Storage demo
-
 ```
 
-  *
+# Demos
 
-TODO
+Use the following commands to try out the various plugin types (building on top of one another)
+
+```
+# Storage
+ros2 bag record --storage simplefile -o simple_chat /chat
+
+# Converter
+ros2 bag record --storage simplefile --serialization-format yaml -o simple_odom_yaml /odom
+
+# Compression
+ros2 bag record --storage simplefile --serialization-format yaml --compression-format zlib --compression-mode file -o simple_odom_yaml_zlib /odom
+```
+
+# Explore the outputs
+
+Look at binary format - you can see the topic names, text payloads, and metadata:
+
+```
+vim simple_chat/simple_chat0.simple
+```
+
+Now you can see the serialized YAML in the format
+
+```
+vim simple_odom_yaml/simple_odom_yaml0.simple
+```
+
+Check out how much smaller the compressed file is:
+
+```
+ls -hal ./*
+```
+
+Playback a bag - take a look at the rviz
+
+```
+ros2 bag play --storage simplefile simple_odom_yaml_zlib
+```
